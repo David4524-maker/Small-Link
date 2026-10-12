@@ -1,0 +1,1279 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Small Link · Acortador de URLs</title>
+<style>
+  :root{
+    --bg:#080b12;
+    --panel:#0f1420;
+    --panel-2:#141b2b;
+    --border:#1f2940;
+    --text:#e8edf7;
+    --muted:#8593ab;
+    --accent:#5b8cff;
+    --accent-2:#8b5cf6;
+    --ok:#34d399;
+    --warn:#fbbf24;
+    --danger:#f87171;
+    --radius:14px;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Inter,Helvetica,Arial,sans-serif;
+    background:
+      radial-gradient(900px 520px at 12% -12%, rgba(91,140,255,.17), transparent 62%),
+      radial-gradient(820px 520px at 92% -6%, rgba(139,92,246,.15), transparent 62%),
+      var(--bg);
+    background-attachment:fixed;
+    color:var(--text);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+    font-size:14px;
+  }
+  h1,h2,h3{margin:0;font-weight:700;letter-spacing:-.02em}
+  h1{font-size:19px}
+  h2{font-size:15px;margin-bottom:14px}
+  p{margin:0}
+  a{color:var(--accent);text-decoration:none}
+
+  /* ---------- Topbar ---------- */
+  .topbar{
+    display:flex;align-items:center;justify-content:space-between;gap:16px;
+    padding:20px 26px;max-width:1280px;margin:0 auto;
+  }
+  .brand{display:flex;align-items:center;gap:12px}
+  .logo{
+    width:42px;height:42px;border-radius:12px;display:grid;place-items:center;
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    font-size:20px;box-shadow:0 10px 30px -12px rgba(91,140,255,.9);
+  }
+  .brand p{font-size:12px;color:var(--muted);margin-top:2px}
+  .pill{
+    font-size:12px;font-weight:600;color:var(--muted);
+    border:1px solid var(--border);background:var(--panel);
+    padding:7px 13px;border-radius:999px;
+  }
+  .pill b{color:var(--text)}
+
+  /* ---------- Layout ---------- */
+  .layout{
+    max-width:1280px;margin:0 auto;padding:0 26px 70px;
+    display:grid;grid-template-columns:390px 1fr;gap:20px;align-items:start;
+  }
+  .col{display:flex;flex-direction:column;gap:20px}
+
+  .card{
+    background:linear-gradient(180deg,rgba(255,255,255,.025),rgba(255,255,255,0)) , var(--panel);
+    border:1px solid var(--border);border-radius:var(--radius);
+    padding:20px;
+  }
+
+  /* ---------- Form ---------- */
+  .field{margin-bottom:14px}
+  label{display:block;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:7px}
+  .opt{font-weight:400;color:#5f6b82}
+  input,select,textarea{
+    width:100%;padding:11px 13px;border-radius:10px;
+    border:1px solid var(--border);background:#0a0f1a;color:var(--text);
+    font-size:13.5px;font-family:inherit;outline:none;transition:.15s;
+  }
+  input:focus,select:focus,textarea:focus{
+    border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,140,255,.14);background:#0b1120;
+  }
+  input::placeholder,textarea::placeholder{color:#4d5871}
+  textarea{resize:vertical;min-height:88px;line-height:1.5}
+
+  .prefixed{display:flex;align-items:center;border:1px solid var(--border);border-radius:10px;background:#0a0f1a;overflow:hidden;transition:.15s}
+  .prefixed:focus-within{border-color:var(--accent);box-shadow:0 0 0 3px rgba(91,140,255,.14)}
+  .prefixed span{font-size:12.5px;color:var(--muted);padding:0 4px 0 12px;white-space:nowrap;font-weight:600}
+  .prefixed input{border:none;background:transparent;box-shadow:none!important;padding-left:2px}
+  .prefixed input:focus{background:transparent}
+
+  details.adv{margin:4px 0 16px}
+  details.adv summary{
+    cursor:pointer;font-size:12.5px;font-weight:600;color:var(--muted);
+    padding:9px 0;list-style:none;user-select:none;
+  }
+  details.adv summary::-webkit-details-marker{display:none}
+  details.adv summary::before{content:"▸ ";color:var(--accent)}
+  details.adv[open] summary::before{content:"▾ "}
+  details.adv summary:hover{color:var(--text)}
+  details.adv > div{padding-top:8px}
+
+  .btn{
+    border:1px solid var(--border);background:var(--panel-2);color:var(--text);
+    padding:10px 15px;border-radius:10px;font-size:13px;font-weight:600;
+    cursor:pointer;transition:.15s;font-family:inherit;display:inline-flex;
+    align-items:center;justify-content:center;gap:6px;white-space:nowrap;
+  }
+  .btn:hover{border-color:#2f3d5c;transform:translateY(-1px)}
+  .btn:active{transform:translateY(0)}
+  .btn.primary{
+    background:linear-gradient(135deg,var(--accent),var(--accent-2));
+    border-color:transparent;color:#fff;
+    box-shadow:0 10px 28px -14px rgba(91,140,255,1);
+  }
+  .btn.ghost{background:transparent}
+  .btn.danger{color:var(--danger);border-color:rgba(248,113,113,.28)}
+  .btn.danger:hover{background:rgba(248,113,113,.08);border-color:rgba(248,113,113,.5)}
+  .btn.block{width:100%}
+  .btn.mini{padding:6px 10px;font-size:11.5px;border-radius:8px;font-weight:600}
+  .btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+
+  .hint{font-size:11.5px;color:#5f6b82;margin-top:12px;text-align:center;line-height:1.5}
+  .muted{color:var(--muted)}
+  .small{font-size:12px;line-height:1.55}
+
+  /* ---------- Resultado ---------- */
+  .result{
+    margin-top:16px;padding:15px;border-radius:12px;
+    border:1px solid rgba(52,211,153,.32);
+    background:linear-gradient(180deg,rgba(52,211,153,.09),rgba(52,211,153,.02));
+    animation:pop .25s ease;
+  }
+  @keyframes pop{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+  .res-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:9px}
+  .res-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.08em;color:var(--ok)}
+  .res-url{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
+    color:#fff;word-break:break-all;margin-bottom:12px;font-weight:600;
+  }
+  .res-orig{
+    font-size:11.5px;color:var(--muted);word-break:break-all;line-height:1.5;
+    padding:8px 10px;border-radius:8px;background:rgba(0,0,0,.25);
+    border:1px dashed var(--border);margin-bottom:12px;
+  }
+  .res-orig b{color:#b7c2d8;font-weight:600}
+  .res-actions{display:flex;gap:8px;flex-wrap:wrap}
+
+  /* ---------- Stats ---------- */
+  .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .stat{
+    background:var(--panel);border:1px solid var(--border);border-radius:var(--radius);
+    padding:16px 17px;
+  }
+  .stat .k{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.07em;color:var(--muted)}
+  .stat .v{font-size:26px;font-weight:800;margin-top:7px;letter-spacing:-.03em}
+  .stat .v.accent{background:linear-gradient(135deg,#7ba4ff,#b18cff);-webkit-background-clip:text;background-clip:text;color:transparent}
+
+  /* ---------- Toolbar ---------- */
+  .toolbar{display:flex;gap:10px;margin-bottom:16px;flex-wrap:wrap}
+  .toolbar input{flex:1;min-width:170px}
+  .toolbar select{width:auto;min-width:140px;cursor:pointer}
+
+  /* ---------- Lista ---------- */
+  .list{display:flex;flex-direction:column;gap:11px}
+  .item{
+    border:1px solid var(--border);border-radius:12px;background:var(--panel-2);
+    padding:14px 15px;transition:.15s;
+  }
+  .item:hover{border-color:#2b3752;background:#161e30}
+  .item.off{opacity:.6}
+  .li-top{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:7px}
+  .li-code{
+    font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:14px;
+    font-weight:700;color:var(--accent);cursor:pointer;
+  }
+  .li-code:hover{text-decoration:underline}
+  .li-url{
+    font-size:12px;color:var(--muted);word-break:break-all;margin-bottom:9px;line-height:1.5;
+  }
+  .li-meta{font-size:11px;color:#5f6b82;display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+  .li-meta b{color:#8b97ad;font-weight:600}
+  .li-bottom{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .li-clicks{
+    display:flex;align-items:center;gap:7px;font-size:12px;color:var(--muted);
+    cursor:pointer;user-select:none;padding:5px 10px;border-radius:8px;
+    border:1px solid var(--border);background:#0b1120;transition:.15s;
+  }
+  .li-clicks:hover{border-color:var(--accent);color:var(--text)}
+  .li-clicks b{color:var(--text);font-size:13px}
+  .li-actions{display:flex;gap:6px;flex-wrap:wrap}
+
+  .badge{
+    font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;
+    padding:3px 8px;border-radius:6px;border:1px solid;
+  }
+  .badge.ok{color:var(--ok);border-color:rgba(52,211,153,.35);background:rgba(52,211,153,.1)}
+  .badge.off{color:var(--muted);border-color:var(--border);background:rgba(255,255,255,.03)}
+  .badge.warn{color:var(--warn);border-color:rgba(251,191,36,.35);background:rgba(251,191,36,.1)}
+  .badge.lock{color:#c4b5fd;border-color:rgba(196,181,253,.35);background:rgba(196,181,253,.1)}
+  .badge.fake{color:#7dd3fc;border-color:rgba(125,211,252,.35);background:rgba(125,211,252,.08)}
+
+  .tag{
+    font-size:10.5px;color:#9fb0cc;background:rgba(91,140,255,.1);
+    border:1px solid rgba(91,140,255,.22);padding:2px 7px;border-radius:5px;
+  }
+
+  .empty{
+    text-align:center;padding:46px 20px;color:var(--muted);
+    border:1px dashed var(--border);border-radius:12px;font-size:13px;line-height:1.7;
+  }
+  .empty .big{font-size:30px;display:block;margin-bottom:10px;opacity:.5}
+
+  /* ---------- Modal ---------- */
+  .modal{
+    position:fixed;inset:0;z-index:90;display:none;
+    align-items:center;justify-content:center;padding:22px;
+    background:rgba(4,7,13,.78);backdrop-filter:blur(7px);
+  }
+  .modal.open{display:flex;animation:fade .18s ease}
+  @keyframes fade{from{opacity:0}to{opacity:1}}
+  .modal-box{
+    background:var(--panel);border:1px solid var(--border);border-radius:16px;
+    width:100%;max-width:560px;max-height:88vh;overflow:auto;padding:22px;
+    box-shadow:0 34px 90px -30px #000;animation:pop .22s ease;
+  }
+  .modal-box.wide{max-width:760px}
+  .modal-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;gap:14px}
+  .x{
+    background:transparent;border:1px solid var(--border);color:var(--muted);
+    width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;
+    line-height:1;display:grid;place-items:center;transition:.15s;flex:none;
+  }
+  .x:hover{color:var(--text);border-color:#3a4867}
+
+  .qr-wrap{display:flex;flex-direction:column;align-items:center;gap:14px}
+  .qr-wrap img{
+    width:230px;height:230px;background:#fff;border-radius:12px;padding:10px;display:block;
+  }
+  .qr-code{
+    font-family:ui-monospace,monospace;font-size:13px;color:var(--accent);
+    word-break:break-all;text-align:center;font-weight:600;
+  }
+
+  .chart{display:flex;align-items:flex-end;gap:8px;height:110px;margin:18px 0 6px}
+  .bar{flex:1;display:flex;flex-direction:column;align-items:center;gap:6px;height:100%;justify-content:flex-end}
+  .bar .fill{
+    width:100%;border-radius:6px 6px 3px 3px;min-height:3px;
+    background:linear-gradient(180deg,var(--accent),var(--accent-2));
+    transition:height .35s ease;
+  }
+  .bar .lbl{font-size:10px;color:var(--muted);text-transform:capitalize}
+  .bar .num{font-size:10.5px;color:#9fb0cc;font-weight:700}
+
+  table{width:100%;border-collapse:collapse;font-size:12px}
+  th{
+    text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;
+    color:var(--muted);padding:8px 9px;border-bottom:1px solid var(--border);
+    position:sticky;top:0;background:var(--panel);
+  }
+  td{padding:9px;border-bottom:1px solid rgba(31,41,64,.6);color:#c3cddf}
+  tr:last-child td{border-bottom:none}
+
+  /* ---------- Overlay de redirección ---------- */
+  .redirect{
+    position:fixed;inset:0;z-index:200;display:none;
+    align-items:center;justify-content:center;padding:24px;
+    background:radial-gradient(700px 500px at 50% 0%, rgba(91,140,255,.16), transparent 65%), #060911;
+  }
+  .redirect.open{display:flex;animation:fade .2s ease}
+  .rd-card{
+    width:100%;max-width:520px;text-align:center;
+    background:var(--panel);border:1px solid var(--border);border-radius:18px;
+    padding:38px 30px;box-shadow:0 40px 100px -40px #000;position:relative;
+  }
+  .rd-card h2{font-size:20px;margin-bottom:10px}
+  .rd-url{
+    font-family:ui-monospace,monospace;font-size:12.5px;color:var(--muted);
+    word-break:break-all;line-height:1.6;margin:12px 0 18px;
+  }
+  .rd-note{font-size:11.5px;color:#5f6b82;line-height:1.6}
+  .rd-count{
+    font-size:46px;font-weight:800;letter-spacing:-.04em;margin-top:16px;
+    background:linear-gradient(135deg,#7ba4ff,#b18cff);
+    -webkit-background-clip:text;background-clip:text;color:transparent;
+  }
+  .rd-spinner{
+    width:52px;height:52px;margin:0 auto 20px;border-radius:50%;
+    border:3px solid rgba(91,140,255,.18);border-top-color:var(--accent);
+    animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg)}}
+  .rd-ok{
+    width:64px;height:64px;margin:0 auto 20px;border-radius:50%;display:grid;place-items:center;
+    font-size:30px;color:#06120c;background:linear-gradient(135deg,#4ade80,#34d399);
+    box-shadow:0 16px 44px -16px rgba(52,211,153,.9);
+  }
+  .rd-err{
+    width:64px;height:64px;margin:0 auto 20px;border-radius:50%;display:grid;place-items:center;
+    font-size:30px;color:#1a0a0a;background:linear-gradient(135deg,#fca5a5,#f87171);
+  }
+  .rd-dest{
+    background:#0a0f1a;border:1px solid var(--border);border-radius:10px;
+    padding:13px;font-family:ui-monospace,monospace;font-size:12.5px;
+    color:#c3cddf;word-break:break-all;margin:16px 0 20px;line-height:1.6;
+  }
+  .rd-actions{display:flex;gap:10px;justify-content:center;flex-wrap:wrap}
+  .rd-close{position:absolute;top:16px;right:16px}
+  .rd-step{
+    display:flex;align-items:center;justify-content:center;gap:8px;
+    font-size:11px;color:var(--muted);margin-bottom:6px;
+  }
+  .rd-step .dot{
+    width:7px;height:7px;border-radius:50%;background:var(--muted);
+    transition:.2s;
+  }
+  .rd-step .dot.active{background:var(--accent);box-shadow:0 0 0 4px rgba(91,140,255,.18)}
+
+  /* ---------- Toast ---------- */
+  .toast{
+    position:fixed;left:50%;bottom:28px;transform:translate(-50%,26px);
+    background:#182033;border:1px solid var(--border);color:var(--text);
+    padding:12px 20px;border-radius:11px;font-size:13px;font-weight:600;
+    opacity:0;pointer-events:none;transition:.24s;z-index:300;
+    box-shadow:0 22px 50px -22px #000;
+  }
+  .toast.show{opacity:1;transform:translate(-50%,0)}
+  .toast.ok{border-color:rgba(52,211,153,.5)}
+  .toast.err{border-color:rgba(248,113,113,.5)}
+
+  .divider{height:1px;background:var(--border);margin:16px 0}
+
+  /* ---------- Info box ---------- */
+  .info{
+    font-size:11.5px;color:#9fb0cc;line-height:1.6;
+    background:rgba(91,140,255,.06);border:1px solid rgba(91,140,255,.18);
+    padding:11px 13px;border-radius:10px;
+  }
+  .info b{color:#cdd9f2}
+
+  @media (max-width:1000px){
+    .layout{grid-template-columns:1fr;padding:0 18px 60px}
+    .topbar{padding:18px}
+    .stats{grid-template-columns:repeat(2,1fr)}
+  }
+  @media (max-width:520px){
+    .stats{grid-template-columns:1fr 1fr}
+    .stat .v{font-size:21px}
+    .li-bottom{flex-direction:column;align-items:stretch}
+    .li-actions{justify-content:flex-start}
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <div class="logo">🔗</div>
+    <div>
+      <h1>Small Link</h1>
+      <p>Acortador con dominio camuflado · sin publicidad</p>
+    </div>
+  </div>
+  <span class="pill">Modo: <b>Dominio original</b></span>
+</header>
+
+<main class="layout">
+
+  <!-- ============ COLUMNA IZQUIERDA ============ -->
+  <div class="col">
+
+    <form class="card" id="createForm" autocomplete="off">
+      <h2>Crear enlace acortado</h2>
+
+      <div class="field">
+        <label for="origUrl">URL larga</label>
+        <input id="origUrl" type="text" placeholder="https://youtube.com/@DavidGuzmanYT-n2e/videos" required>
+      </div>
+
+      <div class="field">
+        <label for="alias">Código corto personalizado <span class="opt">(opcional)</span></label>
+        <input id="alias" type="text" placeholder="xK9mP2" maxlength="32">
+      </div>
+
+      <details class="adv">
+        <summary>Opciones avanzadas</summary>
+        <div>
+          <div class="field">
+            <label for="pass">Contraseña <span class="opt">(opcional)</span></label>
+            <input id="pass" type="text" placeholder="Vacío = sin protección">
+          </div>
+          <div class="field">
+            <label for="exp">Fecha de expiración <span class="opt">(opcional)</span></label>
+            <input id="exp" type="date">
+          </div>
+          <div class="field">
+            <label for="tags">Etiquetas <span class="opt">(separadas por comas)</span></label>
+            <input id="tags" type="text" placeholder="marketing, verano">
+          </div>
+        </div>
+      </details>
+
+      <button class="btn primary block" type="submit">Acortar URL</button>
+      <p class="hint">El enlace resultante usar&aacute; el dominio de tu URL original</p>
+
+      <div class="result" id="result" hidden></div>
+    </form>
+
+    <div class="card">
+      <h2>¿Cómo funciona?</h2>
+      <div class="info">
+        <b>1.</b> Pegas una URL larga (ej: <i>youtube.com/@usuario/videos</i>).<br>
+        <b>2.</b> Small Link extrae el dominio (<i>youtube.com</i>) y le a&ntilde;ade un c&oacute;digo aleatorio.<br>
+        <b>3.</b> El enlace mostrado parece un enlace corto del propio sitio (<i>youtube.com/xK9mP2</i>).<br>
+        <b>4.</b> Al abrirlo dentro de esta app, redirige a la URL larga original.
+        <div class="divider" style="margin:11px 0"></div>
+        <b>Nota:</b> no es un acortador real de servidor — el enlace se resuelve localmente en este navegador.
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Importación masiva</h2>
+      <div class="field">
+        <textarea id="bulk" placeholder="https://youtube.com/@uno&#10;https://twitter.com/dos&#10;https://github.com/tres"></textarea>
+      </div>
+      <button class="btn ghost block" id="bulkBtn" type="button">Generar enlaces</button>
+      <p class="hint">Una URL por línea · se genera un código único para cada una</p>
+    </div>
+
+  </div>
+
+  <!-- ============ COLUMNA DERECHA ============ -->
+  <div class="col">
+
+    <div class="stats">
+      <div class="stat"><div class="k">Enlaces</div><div class="v" id="sLinks">0</div></div>
+      <div class="stat"><div class="k">Clics totales</div><div class="v accent" id="sClicks">0</div></div>
+      <div class="stat"><div class="k">Activos</div><div class="v" id="sActive">0</div></div>
+      <div class="stat"><div class="k">Clics hoy</div><div class="v" id="sToday">0</div></div>
+    </div>
+
+    <div class="card">
+      <h2>Panel de gestión</h2>
+
+      <div class="toolbar">
+        <input id="search" type="text" placeholder="Buscar por código, URL o etiqueta…">
+        <select id="filter">
+          <option value="all">Todos</option>
+          <option value="active">Activos</option>
+          <option value="inactive">Desactivados</option>
+          <option value="expired">Caducados</option>
+        </select>
+        <button class="btn ghost" id="exportBtn" type="button">Exportar CSV</button>
+      </div>
+
+      <div class="list" id="list"></div>
+    </div>
+
+    <p class="hint" style="text-align:left">
+      Los enlaces se resuelven dentro de esta página mediante <b>#/código</b>.
+      Usa el botón <b>Probar</b> de cada enlace para simular la redirección.
+    </p>
+
+  </div>
+</main>
+
+<!-- ============ MODAL ============ -->
+<div class="modal" id="modal">
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<!-- ============ OVERLAY REDIRECCIÓN ============ -->
+<div class="redirect" id="redirect">
+  <div class="rd-card">
+    <button class="x rd-close" onclick="closeRedirect()" title="Cerrar">✕</button>
+    <div id="redirectBody"></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   SMALL LINK · Acortador con dominio camuflado
+   ========================================================= */
+
+const STORE_KEY = 'smalllink.state.v2';
+const RESERVED  = ['api','admin','panel','qr','nuevo','login','about','settings','static','assets','small','link','www'];
+
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------------- Estado ---------------- */
+let state = { links: [] };
+
+function loadState(){
+  try{
+    const raw = localStorage.getItem(STORE_KEY);
+    if(!raw) return;
+    const p = JSON.parse(raw);
+    if(p && Array.isArray(p.links)) state.links = p.links;
+  }catch(e){ console.warn('No se pudo leer el almacenamiento:', e); }
+}
+function save(){
+  try{ localStorage.setItem(STORE_KEY, JSON.stringify(state)); }
+  catch(e){ toast('Almacenamiento lleno', 'err'); }
+}
+
+/* ---------------- Utilidades ---------------- */
+const ALPHABET = 'abcdefghijkmnopqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+function genCode(n = 6){
+  const a = new Uint32Array(n);
+  (crypto.getRandomValues ? crypto : { getRandomValues: arr => arr.forEach((_, i) => arr[i] = Math.random() * 4294967295) }).getRandomValues(a);
+  let s = '';
+  for(let i = 0; i < n; i++) s += ALPHABET[a[i] % ALPHABET.length];
+  return s;
+}
+function uniqueCode(){
+  let c, guard = 0;
+  do { c = genCode(6); guard++; } while(state.links.some(l => l.code === c) && guard < 500);
+  return c;
+}
+function normalizeUrl(raw){
+  let v = String(raw || '').trim();
+  if(!v) throw new Error('Escribe una URL.');
+  if(!/^[a-zA-Z][a-zA-Z0-9+.-]*:/.test(v)) v = 'https://' + v;
+  let u;
+  try { u = new URL(v); } catch(e){ throw new Error('La URL no es válida.'); }
+  if(u.protocol !== 'http:' && u.protocol !== 'https:')
+    throw new Error('Solo se permiten enlaces http:// o https://');
+  if(!u.hostname || !u.hostname.includes('.'))
+    throw new Error('El dominio no parece válido.');
+  return u.href;
+}
+function isRisky(url){
+  try{
+    const u = new URL(url);
+    if(/^(\d{1,3}\.){3}\d{1,3}$/.test(u.hostname)) return true;
+    if(/(bit\.ly|tinyurl\.com|t\.co|goo\.gl|is\.gd|ow\.ly)$/i.test(u.hostname)) return true;
+    if(/(login|verify|secure|account)-?(update|confirm)/i.test(u.pathname)) return true;
+  }catch(e){}
+  return false;
+}
+function hashPass(str){
+  let h = 5381;
+  for(let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0;
+  return 'h' + Math.abs(h).toString(36);
+}
+const fmtDate = ts => new Date(ts).toLocaleString('es-ES',
+  { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' });
+const fmtDay  = ts => new Date(ts).toLocaleDateString('es-ES',
+  { day:'2-digit', month:'2-digit', year:'numeric' });
+
+const isExpired  = l => !!l.expiresAt && Date.now() > new Date(l.expiresAt + 'T23:59:59').getTime();
+
+/* *** CLAVE ***: el enlace "corto" mostrado usa el dominio de la URL original */
+function shareUrl(l){ return 'https://' + l.fakeDomain + '/' + l.code; }
+function safeHref(u){ return /^https?:\/\//i.test(u) ? esc(u) : '#'; }
+
+/* Extrae el hostname (dominio raíz + subdominios sin www) */
+function extractFakeDomain(url){
+  try{
+    const h = new URL(url).hostname.replace(/^www\./i, '');
+    return h;
+  }catch(e){ return 'example.com'; }
+}
+
+function detectDevice(){
+  const ua = navigator.userAgent;
+  if(/iPad|Tablet|PlayBook|Silk/i.test(ua)) return 'Tablet';
+  if(/Mobi|Android|iPhone|iPod|Windows Phone/i.test(ua)) return 'Móvil';
+  return 'Escritorio';
+}
+function detectBrowser(){
+  const ua = navigator.userAgent;
+  if(/Edg\//i.test(ua)) return 'Edge';
+  if(/OPR\/|Opera/i.test(ua)) return 'Opera';
+  if(/Firefox\//i.test(ua)) return 'Firefox';
+  if(/Chrome\//i.test(ua)) return 'Chrome';
+  if(/Safari\//i.test(ua)) return 'Safari';
+  return 'Otro';
+}
+function detectOS(){
+  const ua = navigator.userAgent;
+  if(/Windows/i.test(ua)) return 'Windows';
+  if(/Android/i.test(ua)) return 'Android';
+  if(/iPhone|iPad|iPod/i.test(ua)) return 'iOS';
+  if(/Mac OS X/i.test(ua)) return 'macOS';
+  if(/Linux/i.test(ua)) return 'Linux';
+  return 'Otro';
+}
+function timezone(){
+  try { return Intl.DateTimeFormat().resolvedOptions().timeZone || '—'; }
+  catch(e){ return '—'; }
+}
+function referrerHost(){
+  try { return document.referrer ? new URL(document.referrer).hostname : 'Directo'; }
+  catch(e){ return 'Directo'; }
+}
+
+/* ---------------- Toast ---------------- */
+let toastTimer;
+function toast(msg, type = ''){
+  const t = $('#toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + type;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.className = 'toast'; }, 2400);
+}
+
+/* ---------------- Portapapeles ---------------- */
+async function copyText(text){
+  try{
+    await navigator.clipboard.writeText(text);
+    toast('Copiado al portapapeles ✓', 'ok');
+  }catch(e){
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.cssText = 'position:fixed;opacity:0;top:0;left:0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); toast('Copiado ✓', 'ok'); }
+    catch(_){ toast('No se pudo copiar', 'err'); }
+    ta.remove();
+  }
+}
+
+/* ---------------- Crear enlace ---------------- */
+function createLink({ url, code, pass, expiresAt, tags }){
+  const link = {
+    code,
+    url,
+    fakeDomain: extractFakeDomain(url),   /* <-- dominio mostrado */
+    createdAt: Date.now(),
+    active: true,
+    clicks: [],
+    tags: tags || [],
+    passHash: pass ? hashPass(pass) : null,
+    expiresAt: expiresAt || null
+  };
+  state.links.unshift(link);
+  save();
+  return link;
+}
+
+/* ---------------- Render ---------------- */
+function render(){
+  renderStats();
+  renderList();
+}
+
+function renderStats(){
+  const all   = state.links;
+  const clicks = all.reduce((s, l) => s + (l.clicks ? l.clicks.length : 0), 0);
+  const active = all.filter(l => l.active && !isExpired(l)).length;
+
+  const start = new Date(); start.setHours(0,0,0,0);
+  const today = all.reduce((s, l) =>
+    s + (l.clicks || []).filter(c => c.t >= start.getTime()).length, 0);
+
+  $('#sLinks').textContent  = all.length;
+  $('#sClicks').textContent = clicks;
+  $('#sActive').textContent = active;
+  $('#sToday').textContent  = today;
+}
+
+function renderList(){
+  const q = $('#search').value.trim().toLowerCase();
+  const f = $('#filter').value;
+  const box = $('#list');
+
+  let items = [...state.links].sort((a, b) => b.createdAt - a.createdAt);
+
+  if(f === 'active')   items = items.filter(l => l.active && !isExpired(l));
+  if(f === 'inactive') items = items.filter(l => !l.active);
+  if(f === 'expired')  items = items.filter(isExpired);
+
+  if(q){
+    items = items.filter(l =>
+      l.code.toLowerCase().includes(q) ||
+      l.url.toLowerCase().includes(q) ||
+      l.fakeDomain.toLowerCase().includes(q) ||
+      (l.tags || []).some(t => t.toLowerCase().includes(q))
+    );
+  }
+
+  if(!items.length){
+    box.innerHTML = `<div class="empty">
+      <span class="big">🔗</span>
+      ${state.links.length ? 'No hay enlaces que coincidan con el filtro.' : 'Aún no has creado ningún enlace.<br>Pega una URL larga a la izquierda para empezar.'}
+    </div>`;
+    return;
+  }
+
+  box.innerHTML = items.map(l => {
+    const expired = isExpired(l);
+    const clicks  = (l.clicks || []).length;
+
+    let badge = '<span class="badge ok">Activo</span>';
+    if(expired)        badge = '<span class="badge warn">Caducado</span>';
+    else if(!l.active) badge = '<span class="badge off">Desactivado</span>';
+
+    const extra = [
+      l.passHash ? '<span class="badge lock">🔒 Contraseña</span>' : '',
+      isRisky(l.url) ? '<span class="badge warn">Destino a revisar</span>' : ''
+    ].filter(Boolean).join(' ');
+
+    const tagsHtml = (l.tags || []).length
+      ? (l.tags || []).map(t => `<span class="tag">#${esc(t)}</span>`).join(' ')
+      : '';
+
+    return `
+      <article class="item ${(!l.active || expired) ? 'off' : ''}">
+        <div class="li-top">
+          <span class="li-code" data-action="test" data-id="${esc(l.code)}" title="Simular redirección">
+            ${esc(l.fakeDomain)}/${esc(l.code)}
+          </span>
+          ${badge} ${extra}
+          <span class="badge fake">Camuflado</span>
+        </div>
+
+        <div class="li-url" title="${esc(l.url)}">
+          <span style="color:#5f6b82">Destino real:</span> ${esc(l.url)}
+        </div>
+
+        <div class="li-meta">
+          <span>Creado <b>${fmtDay(l.createdAt)}</b></span>
+          ${l.expiresAt ? `<span>Caduca <b>${fmtDay(l.expiresAt)}</b></span>` : ''}
+          ${tagsHtml}
+        </div>
+
+        <div class="li-bottom">
+          <span class="li-clicks" data-action="stats" data-id="${esc(l.code)}" title="Ver analítica">
+            📊 <b>${clicks}</b> ${clicks === 1 ? 'clic' : 'clics'}
+          </span>
+          <div class="li-actions">
+            <button class="btn mini" data-action="copy"   data-id="${esc(l.code)}">Copiar</button>
+            <button class="btn mini" data-action="qr"     data-id="${esc(l.code)}">QR</button>
+            <button class="btn mini" data-action="test"   data-id="${esc(l.code)}">Probar</button>
+            <button class="btn mini" data-action="edit"   data-id="${esc(l.code)}">Editar</button>
+            <button class="btn mini ghost" data-action="toggle" data-id="${esc(l.code)}">
+              ${l.active ? 'Desactivar' : 'Activar'}
+            </button>
+            <button class="btn mini danger" data-action="delete" data-id="${esc(l.code)}">Borrar</button>
+          </div>
+        </div>
+      </article>`;
+  }).join('');
+}
+
+/* ---------------- Eventos globales (delegación) ---------------- */
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-action], [data-copy], [data-qr]');
+  if(btn){
+    if(btn.dataset.copy){ copyText(btn.dataset.copy); return; }
+    if(btn.dataset.qr){ openQR(btn.dataset.qr); return; }
+
+    const { action, id } = btn.dataset;
+    const link = state.links.find(l => l.code === id);
+    if(!link && action !== 'test') return;
+
+    switch(action){
+      case 'copy':   copyText(shareUrl(link)); break;
+      case 'qr':     openQR(link.code); break;
+      case 'test':   location.hash = '#/' + id; break;
+      case 'stats':  openStats(link); break;
+      case 'edit':   openEdit(link); break;
+      case 'toggle':
+        link.active = !link.active;
+        save(); render();
+        toast(link.active ? 'Enlace activado' : 'Enlace desactivado');
+        break;
+      case 'delete':
+        if(confirm(`¿Eliminar el enlace ${link.fakeDomain}/${link.code}?`)){
+          state.links = state.links.filter(l => l.code !== link.code);
+          save(); render();
+          toast('Enlace eliminado');
+        }
+        break;
+    }
+    return;
+  }
+
+  if(e.target.id === 'modal') closeModal();
+});
+
+document.addEventListener('keydown', e => {
+  if(e.key === 'Escape'){
+    closeModal();
+    if($('#redirect').classList.contains('open')) closeRedirect();
+  }
+});
+
+/* ---------------- Formulario de creación ---------------- */
+$('#createForm').addEventListener('submit', e => {
+  e.preventDefault();
+  const rawUrl = $('#origUrl').value;
+  const alias  = $('#alias').value.trim();
+  const pass   = $('#pass').value.trim();
+  const exp    = $('#exp').value;
+  const tags   = $('#tags').value.split(',').map(t => t.trim()).filter(Boolean).slice(0, 5);
+
+  let url;
+  try { url = normalizeUrl(rawUrl); }
+  catch(err){ toast(err.message, 'err'); return; }
+
+  let code;
+  if(alias){
+    if(!/^[A-Za-z0-9_-]{3,32}$/.test(alias)){
+      toast('Código no válido: 3-32 caracteres (letras, números, - y _)', 'err'); return;
+    }
+    if(RESERVED.includes(alias.toLowerCase())){
+      toast('Ese código está reservado', 'err'); return;
+    }
+    if(state.links.some(l => l.code.toLowerCase() === alias.toLowerCase())){
+      toast('Ese código ya está en uso', 'err'); return;
+    }
+    code = alias;
+  } else {
+    code = uniqueCode();
+  }
+
+  const link = createLink({ url, code, pass, expiresAt: exp || null, tags });
+  render();
+
+  /* Panel de resultado con la URL CAMUFLADA y la original */
+  const box = $('#result');
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="res-top">
+      <span class="res-label">Enlace camuflado listo</span>
+      ${isRisky(link.url) ? '<span class="badge warn">Destino a revisar</span>' : ''}
+    </div>
+    <div class="res-url">${esc(shareUrl(link))}</div>
+    <div class="res-orig"><b>Destino real:</b> ${esc(link.url)}</div>
+    <div class="res-actions">
+      <button class="btn mini" type="button" data-copy="${esc(shareUrl(link))}">Copiar enlace corto</button>
+      <button class="btn mini" type="button" data-action="test" data-id="${esc(link.code)}">Probar</button>
+      <button class="btn mini" type="button" data-qr="${esc(link.code)}">Código QR</button>
+    </div>`;
+
+  e.target.reset();
+  toast('Enlace camuflado ✓', 'ok');
+});
+
+/* ---------------- Búsqueda / filtro / export ---------------- */
+$('#search').addEventListener('input', renderList);
+$('#filter').addEventListener('change', renderList);
+
+$('#exportBtn').addEventListener('click', () => {
+  if(!state.links.length){ toast('No hay enlaces para exportar', 'err'); return; }
+  const head = ['codigo','dominio_camuflado','url_original','creado','caduca','activo','clics','etiquetas'];
+  const rows = state.links.map(l => [
+    l.code,
+    l.fakeDomain,
+    l.url,
+    new Date(l.createdAt).toISOString(),
+    l.expiresAt || '',
+    l.active ? 'si' : 'no',
+    (l.clicks || []).length,
+    (l.tags || []).join('|')
+  ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(','));
+  const csv = [head.join(','), ...rows].join('\n');
+  downloadBlob(csv, 'small-link-enlaces.csv', 'text/csv;charset=utf-8');
+  toast('CSV exportado ✓', 'ok');
+});
+
+function downloadBlob(content, filename, type){
+  const blob = new Blob(['\uFEFF' + content], { type });
+  const url  = URL.createObjectURL(blob);
+  const a    = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1500);
+}
+
+/* ---------------- Importación masiva ---------------- */
+$('#bulkBtn').addEventListener('click', () => {
+  const lines = $('#bulk').value.split('\n').map(s => s.trim()).filter(Boolean);
+  if(!lines.length){ toast('Pega al menos una URL', 'err'); return; }
+
+  let ok = 0, fail = 0;
+  lines.forEach(line => {
+    try{
+      const url = normalizeUrl(line);
+      createLink({ url, code: uniqueCode(), pass: null, expiresAt: null, tags: ['importado'] });
+      ok++;
+    }catch(e){ fail++; }
+  });
+
+  $('#bulk').value = '';
+  render();
+  toast(`${ok} enlace(s) creado(s)${fail ? ` · ${fail} inválido(s)` : ''}`, ok ? 'ok' : 'err');
+});
+
+/* ---------------- Modales ---------------- */
+function openModal(html, wide){
+  const box = $('#modalBox');
+  box.className = 'modal-box' + (wide ? ' wide' : '');
+  box.innerHTML = html;
+  $('#modal').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal(){
+  $('#modal').classList.remove('open');
+  $('#modalBox').innerHTML = '';
+  if(!$('#redirect').classList.contains('open')) document.body.style.overflow = '';
+}
+window.closeModal = closeModal;
+
+/* ----- QR ----- */
+function qrSrc(text, size = 320){
+  const base = 'https://api.qrserver.com/v1/create-qr-code/';
+  return base + '?size=' + size + 'x' + size + '&qzone=2&color=0b1220&bgcolor=ffffff&data=' + encodeURIComponent(text);
+}
+function openQR(code){
+  const link = state.links.find(l => l.code === code);
+  if(!link) return;
+  const url = shareUrl(link);
+
+  openModal(`
+    <div class="modal-head">
+      <h2 style="margin:0">Código QR</h2>
+      <button class="x" onclick="closeModal()">✕</button>
+    </div>
+    <div class="qr-wrap">
+      <img src="${qrSrc(url)}" alt="Código QR de ${esc(url)}" id="qrImg">
+      <div class="qr-code">${esc(url)}</div>
+      <p class="rd-note">Apunta al destino real:</p>
+      <div class="rd-dest" style="margin:0;font-size:11.5px">${esc(link.url)}</div>
+      <div class="res-actions" style="justify-content:center;margin-top:14px">
+        <button class="btn mini" onclick="copyText('${esc(url)}')">Copiar enlace</button>
+        <button class="btn mini" id="qrDl">Descargar PNG</button>
+      </div>
+    </div>
+  `);
+
+  $('#qrDl').addEventListener('click', async () => {
+    try{
+      const res  = await fetch(qrSrc(url, 640));
+      const blob = await res.blob();
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'small-link-' + code + '.png';
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(a.href), 1500);
+      toast('QR descargado ✓', 'ok');
+    }catch(e){
+      window.open(qrSrc(url, 640), '_blank', 'noopener');
+      toast('Ábrelo en la nueva pestaña para guardarlo');
+    }
+  });
+}
+window.copyText = copyText;
+
+/* ----- Editar ----- */
+function openEdit(link){
+  openModal(`
+    <div class="modal-head">
+      <h2 style="margin:0">Editar enlace</h2>
+      <button class="x" onclick="closeModal()">✕</button>
+    </div>
+    <form id="editForm">
+      <div class="field">
+        <label>URL de destino (la larga)</label>
+        <input id="eUrl" type="text" value="${esc(link.url)}" required>
+      </div>
+      <div class="field">
+        <label>Código corto</label>
+        <input id="eCode" type="text" value="${esc(link.code)}" maxlength="32">
+      </div>
+      <div class="field">
+        <label>Dominio camuflado</label>
+        <input id="eDomain" type="text" value="${esc(link.fakeDomain)}" placeholder="youtube.com">
+      </div>
+      <div class="field">
+        <label>Contraseña <span class="opt">(vacío = sin contraseña)</span></label>
+        <input id="ePass" type="text" placeholder="${link.passHash ? '•••••• (protegido)' : 'Sin protección'}">
+      </div>
+      <div class="field">
+        <label>Fecha de expiración</label>
+        <input id="eExp" type="date" value="${link.expiresAt || ''}">
+      </div>
+      <div class="field">
+        <label>Etiquetas</label>
+        <input id="eTags" type="text" value="${esc((link.tags || []).join(', '))}">
+      </div>
+      <div class="res-actions" style="margin-top:18px">
+        <button class="btn primary" type="submit">Guardar cambios</button>
+        <button class="btn ghost" type="button" onclick="closeModal()">Cancelar</button>
+      </div>
+    </form>
+  `);
+
+  $('#editForm').addEventListener('submit', e => {
+    e.preventDefault();
+
+    let newUrl;
+    try { newUrl = normalizeUrl($('#eUrl').value); }
+    catch(err){ toast(err.message, 'err'); return; }
+
+    const newCode = $('#eCode').value.trim();
+    if(!/^[A-Za-z0-9_-]{3,32}$/.test(newCode)){
+      toast('Código no válido (3-32 caracteres)', 'err'); return;
+    }
+    if(newCode !== link.code){
+      if(RESERVED.includes(newCode.toLowerCase())){ toast('Ese código está reservado', 'err'); return; }
+      if(state.links.some(l => l.code.toLowerCase() === newCode.toLowerCase())){
+        toast('Ese código ya está en uso', 'err'); return;
+      }
+    }
+
+    let newDomain = $('#eDomain').value.trim().toLowerCase()
+      .replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+    if(!newDomain || !/^[a-z0-9.-]+\.[a-z]{2,}$/.test(newDomain)){
+      toast('Dominio camuflado no válido', 'err'); return;
+    }
+
+    const passVal = $('#ePass').value.trim();
+
+    link.url        = newUrl;
+    link.code       = newCode;
+    link.fakeDomain = newDomain;
+    link.expiresAt  = $('#eExp').value || null;
+    link.tags       = $('#eTags').value.split(',').map(t => t.trim()).filter(Boolean).slice(0, 5);
+    if(passVal) link.passHash = hashPass(passVal);
+
+    save(); render(); closeModal();
+    toast('Enlace actualizado ✓', 'ok');
+  });
+}
+
+/* ----- Estadísticas ----- */
+function openStats(link){
+  const clicks = (link.clicks || []);
+  const days = [];
+  for(let i = 6; i >= 0; i--){
+    const d = new Date(); d.setHours(0,0,0,0); d.setDate(d.getDate() - i);
+    const next = d.getTime() + 86400000;
+    days.push({
+      label: d.toLocaleDateString('es-ES', { weekday: 'short' }).slice(0,3),
+      count: clicks.filter(c => c.t >= d.getTime() && c.t < next).length
+    });
+  }
+  const max = Math.max(1, ...days.map(d => d.count));
+
+  const rows = clicks.slice(0, 60).map(c => `
+    <tr>
+      <td>${fmtDate(c.t)}</td>
+      <td>${esc(c.device)}</td>
+      <td>${esc(c.browser)}</td>
+      <td>${esc(c.os)}</td>
+      <td>${esc(c.tz)}</td>
+      <td>${esc(c.ref)}</td>
+    </tr>`).join('');
+
+  openModal(`
+    <div class="modal-head">
+      <h2 style="margin:0">Analítica · ${esc(link.fakeDomain)}/${esc(link.code)}</h2>
+      <button class="x" onclick="closeModal()">✕</button>
+    </div>
+
+    <div class="rd-dest" style="margin:0 0 14px">
+      <b style="color:#8b97ad">Destino real:</b> ${esc(link.url)}
+    </div>
+
+    <div class="stats" style="grid-template-columns:repeat(3,1fr);gap:10px">
+      <div class="stat" style="padding:12px 14px">
+        <div class="k">Clics</div><div class="v accent" style="font-size:22px">${clicks.length}</div>
+      </div>
+      <div class="stat" style="padding:12px 14px">
+        <div class="k">Último</div>
+        <div class="v" style="font-size:13px;font-weight:600;margin-top:9px">${clicks[0] ? fmtDate(clicks[0].t) : '—'}</div>
+      </div>
+      <div class="stat" style="padding:12px 14px">
+        <div class="k">Estado</div>
+        <div class="v" style="font-size:13px;font-weight:600;margin-top:9px">
+          ${isExpired(link) ? 'Caducado' : (link.active ? 'Activo' : 'Inactivo')}
+        </div>
+      </div>
+    </div>
+
+    <div class="chart">
+      ${days.map(d => `
+        <div class="bar">
+          <span class="num">${d.count || ''}</span>
+          <div class="fill" style="height:${Math.round((d.count / max) * 72) + (d.count ? 6 : 2)}px;opacity:${d.count ? 1 : .18}"></div>
+          <span class="lbl">${d.label}</span>
+        </div>`).join('')}
+    </div>
+    <p class="rd-note" style="text-align:center;margin-bottom:18px">Clics de los últimos 7 días</p>
+
+    <div style="max-height:280px;overflow:auto;border:1px solid var(--border);border-radius:10px">
+      <table>
+        <thead>
+          <tr><th>Fecha</th><th>Dispositivo</th><th>Navegador</th><th>SO</th><th>Zona horaria</th><th>Origen</th></tr>
+        </thead>
+        <tbody>
+          ${rows || '<tr><td colspan="6" style="text-align:center;color:var(--muted);padding:26px">Todavía no hay clics registrados</td></tr>'}
+        </tbody>
+      </table>
+    </div>
+
+    <p class="rd-note" style="margin-top:14px">
+      Datos recogidos de forma anónima y agregada, sin cookies ni publicidad.
+    </p>
+  `, true);
+}
+
+/* =========================================================
+   SISTEMA DE REDIRECCIÓN
+   ========================================================= */
+let redirectTimer = null;
+
+function route(){
+  const m = location.hash.match(/^#\/([A-Za-z0-9_-]{1,40})$/);
+  if(m) showRedirect(m[1]);
+  else closeRedirect();
+}
+
+function showRedirect(code){
+  clearInterval(redirectTimer);
+  const box   = $('#redirect');
+  const body  = $('#redirectBody');
+  const link  = state.links.find(l => l.code === code);
+
+  box.classList.add('open');
+  document.body.style.overflow = 'hidden';
+
+  if(!link){
+    body.innerHTML = `
+      <div class="rd-err">✕</div>
+      <h2>Enlace no encontrado</h2>
+      <p class="rd-note">No existe ningún enlace con el código <b>${esc(code)}</b> en este dispositivo.</p>
+      <div class="rd-actions" style="margin-top:22px">
+        <button class="btn primary" onclick="closeRedirect()">Volver al panel</button>
+      </div>`;
+    return;
+  }
+  if(!link.active){
+    body.innerHTML = `
+      <div class="rd-err">⏸</div>
+      <h2>Enlace desactivado</h2>
+      <p class="rd-note">El propietario ha desactivado temporalmente este enlace.</p>
+      <div class="rd-actions" style="margin-top:22px">
+        <button class="btn primary" onclick="closeRedirect()">Volver al panel</button>
+      </div>`;
+    return;
+  }
+  if(isExpired(link)){
+    body.innerHTML = `
+      <div class="rd-err">⌛</div>
+      <h2>Enlace caducado</h2>
+      <p class="rd-note">Este enlace expiró el <b>${fmtDay(link.expiresAt)}</b> y ya no está disponible.</p>
+      <div class="rd-actions" style="margin-top:22px">
+        <button class="btn primary" onclick="closeRedirect()">Volver al panel</button>
+      </div>`;
+    return;
+  }
+  if(link.passHash && !link._unlocked){
+    body.innerHTML = `
+      <div class="rd-spinner" style="border-top-color:#c4b5fd"></div>
+      <h2>Enlace protegido</h2>
+      <p class="rd-note" style="margin-bottom:18px">Introduce la contraseña para continuar.</p>
+      <input id="rdPass" type="password" placeholder="Contraseña" style="text-align:center;margin-bottom:12px">
+      <div class="rd-actions">
+        <button class="btn primary" id="rdUnlock">Desbloquear</button>
+      </div>
+      <p class="rd-note" style="margin-top:14px" id="rdPassErr"></p>`;
+
+    const tryUnlock = () => {
+      const val = $('#rdPass').value;
+      if(hashPass(val) === link.passHash){
+        link._unlocked = true;
+        runRedirect(link);
+      } else {
+        $('#rdPassErr').innerHTML = '<span style="color:var(--danger)">Contraseña incorrecta</span>';
+        $('#rdPass').value = '';
+        $('#rdPass').focus();
+      }
+    };
+    $('#rdUnlock').addEventListener('click', tryUnlock);
+    $('#rdPass').addEventListener('keydown', e => { if(e.key === 'Enter') tryUnlock(); });
+    setTimeout(() => $('#rdPass') && $('#rdPass').focus(), 60);
+    return;
+  }
+
+  runRedirect(link);
+}
+
+function runRedirect(link){
+  registerClick(link);
+  const body = $('#redirectBody');
+
+  body.innerHTML = `
+    <div class="rd-step">
+      <span class="dot active"></span>
+      <span class="dot"></span>
+      <span class="dot"></span>
+      <span>resolviendo ${esc(link.fakeDomain)}/${esc(link.code)}</span>
+    </div>
+    <div class="rd-spinner"></div>
+    <h2>Redirigiendo…</h2>
+    <p class="rd-url" style="margin-top:14px">
+      <span style="color:#5f6b82">destino real:</span><br>
+      ${esc(link.url)}
+    </p>
+    <p class="rd-note">Código <b>${esc(link.code)}</b> · redirección 301 simulada</p>
+    <div class="rd-count" id="rdCount">3</div>`;
+
+  let n = 3;
+  const el = $('#rdCount');
+  redirectTimer = setInterval(() => {
+    n--;
+    if(n <= 0){
+      clearInterval(redirectTimer);
+      drawDestination(link);
+    } else if(el){
+      el.textContent = n;
+    }
+  }, 1000);
+}
+
+function drawDestination(link){
+  $('#redirectBody').innerHTML = `
+    <div class="rd-ok">✓</div>
+    <h2>Destino resuelto</h2>
+    <p class="rd-note">Clic registrado y estadísticas actualizadas.</p>
+    <div class="rd-dest">${esc(link.url)}</div>
+    <div class="rd-actions">
+      <a class="btn primary" href="${safeHref(link.url)}" target="_blank" rel="noopener noreferrer">Ir al destino real</a>
+      <button class="btn ghost" onclick="closeRedirect()">Volver al panel</button>
+    </div>
+    <p class="rd-note" style="margin-top:18px">
+      En un despliegue con backend, este paso sería una cabecera <b>HTTP 301</b> transparente.
+    </p>`;
+}
+
+function registerClick(link){
+  if(!link.clicks) link.clicks = [];
+  link.clicks.unshift({
+    t: Date.now(),
+    device: detectDevice(),
+    browser: detectBrowser(),
+    os: detectOS(),
+    tz: timezone(),
+    ref: referrerHost()
+  });
+  if(link.clicks.length > 300) link.clicks.length = 300;
+  link.lastClick = Date.now();
+  save();
+  renderStats();
+  renderList();
+}
+
+function closeRedirect(){
+  clearInterval(redirectTimer);
+  $('#redirect').classList.remove('open');
+  $('#redirectBody').innerHTML = '';
+  document.body.style.overflow = '';
+  if(location.hash) history.replaceState(null, '', location.pathname + location.search);
+}
+window.closeRedirect = closeRedirect;
+
+/* =========================================================
+   INICIALIZACIÓN
+   ========================================================= */
+loadState();
+render();
+window.addEventListener('hashchange', route);
+route();
+</script>
+</body>
+</html>
