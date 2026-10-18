@@ -93,7 +93,7 @@ elif SERVER_HOST in ('0.0.0.0', '::', ''):
 else:
     BASE_URL = f'http://{SERVER_HOST}:{SERVER_PORT}'
 
-BIND_DESC    = f'{SERVER_HOST}:{SERVER_PORT}'
+BIND_DESC     = f'{SERVER_HOST}:{SERVER_PORT}'
 IS_LOCAL_ONLY = SERVER_HOST in ('127.0.0.1', 'localhost')
 
 ALPHABET     = string.ascii_letters + string.digits
@@ -202,7 +202,8 @@ class RedirectHandler(BaseHTTPRequestHandler):
     def _lookup_and_validate(self, path):
         """
         Busca el código y valida estado/caducidad.
-        Devuelve (row, responded) — responded=True si ya se envió una respuesta de error.
+        Devuelve (row, responded) — responded=True si ya se envió una
+        respuesta de error al cliente.
         """
         conn = get_conn()
         try:
