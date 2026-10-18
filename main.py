@@ -6,6 +6,7 @@ Aplicación de escritorio que combina:
   • Servidor HTTP embebido (puerto 8080) que sirve redirecciones 301 REALES
   • Base de datos SQLite para persistir enlaces y clics
   • Generador de códigos QR por enlace
+  • Protección por contraseña con formulario HTML (POST)
 
 Instalación:
     pip install qrcode[pil]
@@ -13,6 +14,13 @@ Instalación:
 
 Ejecución:
     python smallurl.py
+
+Variables de entorno (opcionales):
+    SMALLURL_HOST         Host de bind (default: 0.0.0.0)
+    SMALLURL_PORT         Puerto (default: 8080)
+    SMALLURL_PUBLIC_URL   URL pública a mostrar (ej: https://mi.dominio.com)
+                          Si se define, los enlaces usan esta base.
+                          Útil para ngrok / Cloudflare Tunnel / VPS.
 """
 
 import tkinter as tk
@@ -25,11 +33,13 @@ import hashlib
 import os
 import sys
 import csv
+import socket
 import webbrowser
 from datetime import datetime, timedelta
-from http.server import BaseHTTPRequestHandler, HTTPServer
-from urllib.parse import urlparse
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import urlparse, parse_qs
 from io import BytesIO
+from html import escape as html_escape
 
 # --- DPI awareness en Windows ---
 if sys.platform == 'win32':
@@ -56,14 +66,42 @@ except ImportError:
 # ---------------------------------------------------------------------------
 # CONFIGURACIÓN
 # ---------------------------------------------------------------------------
+def get_lan_ip():
+    """Devuelve la IP LAN preferida (no requiere conectarse realmente)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.settimeout(0.5)
+        s.connect(('8.8.8.8', 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except Exception:
+        return '127.0.0.1'
+
+
 BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
 DB_PATH      = os.path.join(BASE_DIR, 'smallurl.db')
-SERVER_HOST  = '127.0.0.1'
-SERVER_PORT  = 8080
-BASE_URL     = f'http://{SERVER_HOST}:{SERVER_PORT}'
+SERVER_HOST  = os.environ.get('SMALLURL_HOST', '0.0.0.0')
+SERVER_PORT  = int(os.environ.get('SMALLURL_PORT', '8080'))
+PUBLIC_URL   = os.environ.get('SMALLURL_PUBLIC_URL', '').strip().rstrip('/')
+
+# BASE_URL determina qué enlaces se muestran en la UI y se guardan en CSV
+if PUBLIC_URL:
+    BASE_URL = PUBLIC_URL
+elif SERVER_HOST in ('0.0.0.0', '::', ''):
+    BASE_URL = f'http://{get_lan_ip()}:{SERVER_PORT}'
+else:
+    BASE_URL = f'http://{SERVER_HOST}:{SERVER_PORT}'
+
+BIND_DESC    = f'{SERVER_HOST}:{SERVER_PORT}'
+IS_LOCAL_ONLY = SERVER_HOST in ('127.0.0.1', 'localhost')
+
 ALPHABET     = string.ascii_letters + string.digits
 RESERVED     = {'api', 'admin', 'panel', 'qr', 'static',
                 'favicon.ico', 'index.html', 'new'}
+
+# Estado del servidor (se consulta desde la UI)
+SERVER_STATUS = {'running': False, 'error': None}
 
 # Paleta de colores
 BG        = '#1e1e2e'
@@ -152,50 +190,63 @@ def hash_pwd(p):
 
 
 # ---------------------------------------------------------------------------
-# SERVIDOR HTTP EMBEBIDO (redirecciones 301 reales)
+# SERVIDOR HTTP EMBEBIDO (redirecciones 301 reales + auth por contraseña)
 # ---------------------------------------------------------------------------
 class RedirectHandler(BaseHTTPRequestHandler):
     def log_message(self, *args):
         pass  # Silencioso
 
-    def do_GET(self):
-        path = self.path.strip('/').split('?')[0].split('#')[0]
-
-        # Página raíz informativa
-        if not path or path == 'index.html':
-            self._send_home()
-            return
-
-        # Buscar el código
+    # ------------------------------------------------------------------
+    # Validación común
+    # ------------------------------------------------------------------
+    def _lookup_and_validate(self, path):
+        """
+        Busca el código y valida estado/caducidad.
+        Devuelve (row, responded) — responded=True si ya se envió una respuesta de error.
+        """
         conn = get_conn()
         try:
-            row = conn.execute("SELECT * FROM links WHERE code=?", (path,)).fetchone()
+            row = conn.execute(
+                "SELECT * FROM links WHERE code=?", (path,)
+            ).fetchone()
 
             if not row:
                 self._send_error(404, "Enlace no encontrado",
-                                 f"El código '{path}' no existe en la base de datos.")
-                return
+                                 f"El código '{html_escape(path)}' no existe en la base de datos.")
+                return None, True
 
             if not row['active']:
                 self._send_error(410, "Enlace desactivado",
                                  "Este enlace ha sido desactivado temporalmente.")
-                return
+                return None, True
 
             if row['expires_at']:
                 try:
                     exp = datetime.fromisoformat(row['expires_at'])
                     if datetime.now() > exp:
-                        self._send_error(410, "Enlace caducado",
-                            f"Expiró el {exp.strftime('%d/%m/%Y a las %H:%M')}.")
-                        return
+                        self._send_error(
+                            410, "Enlace caducado",
+                            f"Expiró el {exp.strftime('%d/%m/%Y a las %H:%M')}."
+                        )
+                        return None, True
                 except Exception:
                     pass
 
-            # Registrar clic
+            return row, False
+        finally:
+            conn.close()
+
+    # ------------------------------------------------------------------
+    # Registrar clic + emitir redirección
+    # ------------------------------------------------------------------
+    def _log_and_redirect(self, row, use_303=False):
+        code = row['code']
+        conn = get_conn()
+        try:
             conn.execute(
                 "INSERT INTO clicks (code, clicked_at, ip, user_agent, referer) "
                 "VALUES (?, ?, ?, ?, ?)",
-                (path,
+                (code,
                  datetime.now().isoformat(timespec='seconds'),
                  self.client_address[0],
                  self.headers.get('User-Agent', '')[:500],
@@ -203,38 +254,99 @@ class RedirectHandler(BaseHTTPRequestHandler):
             )
             conn.execute(
                 "UPDATE links SET total_clicks = total_clicks + 1 WHERE code=?",
-                (path,)
+                (code,)
             )
             conn.commit()
-
-            # ✅ REDIRECCIÓN 301 REAL
-            self.send_response(301)
-            self.send_header('Location', row['url'])
-            self.send_header('Cache-Control', 'no-cache, no-store')
-            self.end_headers()
-
         finally:
             conn.close()
 
-    # ---------- HTML auxiliares ----------
+        self.send_response(303 if use_303 else 301)
+        self.send_header('Location', row['url'])
+        self.send_header('Cache-Control', 'no-cache, no-store')
+        self.end_headers()
+
+    # ------------------------------------------------------------------
+    # GET
+    # ------------------------------------------------------------------
+    def do_GET(self):
+        path = self.path.strip('/').split('?')[0].split('#')[0]
+
+        if not path or path == 'index.html':
+            self._send_home()
+            return
+
+        row, responded = self._lookup_and_validate(path)
+        if responded:
+            return
+
+        # ¿Protegido con contraseña? → mostrar formulario
+        if row['pass_hash']:
+            self._send_password_form(path)
+            return
+
+        self._log_and_redirect(row)
+
+    # ------------------------------------------------------------------
+    # POST  (formulario de contraseña)
+    # ------------------------------------------------------------------
+    def do_POST(self):
+        path = self.path.strip('/').split('?')[0].split('#')[0]
+
+        if not path or path == 'index.html':
+            self._send_error(400, "Solicitud inválida", "Ruta POST no permitida.")
+            return
+
+        row, responded = self._lookup_and_validate(path)
+        if responded:
+            return
+
+        # Sin contraseña configurada → redirect directo
+        if not row['pass_hash']:
+            self._log_and_redirect(row, use_303=True)
+            return
+
+        # Leer body con límite
+        try:
+            length = int(self.headers.get('Content-Length', 0) or 0)
+        except ValueError:
+            length = 0
+        if length > 4096:
+            self._send_error(400, "Solicitud inválida",
+                             "El cuerpo de la petición es demasiado grande.")
+            return
+        body = self.rfile.read(length).decode('utf-8', errors='replace') if length else ''
+        params = parse_qs(body)
+        password = (params.get('password', ['']) or [''])[0]
+
+        if hash_pwd(password) != row['pass_hash']:
+            self._send_password_form(path, error=True)
+            return
+
+        self._log_and_redirect(row, use_303=True)
+
+    # ------------------------------------------------------------------
+    # HTML auxiliares
+    # ------------------------------------------------------------------
     def _send_home(self):
-        html = """<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+        html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
         <title>Small URL Python</title>
         <style>
-            body{font-family:system-ui,sans-serif;background:#1e1e2e;color:#e0e0ea;
-                 display:grid;place-items:center;min-height:100vh;margin:0;padding:24px}
-            .box{max-width:520px;text-align:center;background:#2a2a3e;
-                 border:1px solid #3a3a52;border-radius:16px;padding:44px 32px}
-            h1{margin:0 0 12px;font-size:22px}
-            h1 span{color:#818cf8}
-            p{color:#8888a0;line-height:1.6;margin:8px 0}
-            code{background:#1a1a2a;padding:3px 8px;border-radius:6px;color:#a5b4fc}
+            body{{font-family:system-ui,sans-serif;background:#1e1e2e;color:#e0e0ea;
+                 display:grid;place-items:center;min-height:100vh;margin:0;padding:24px}}
+            .box{{max-width:520px;text-align:center;background:#2a2a3e;
+                 border:1px solid #3a3a52;border-radius:16px;padding:44px 32px}}
+            h1{{margin:0 0 12px;font-size:22px}}
+            h1 span{{color:#818cf8}}
+            p{{color:#8888a0;line-height:1.6;margin:8px 0}}
+            code{{background:#1a1a2a;padding:3px 8px;border-radius:6px;color:#a5b4fc}}
         </style></head><body>
         <div class="box">
             <h1>&#128279; Small <span>URL Python</span></h1>
             <p>Servidor de redirecciones activo.</p>
             <p>Abre un enlace del tipo<br>
-               <code>http://127.0.0.1:8080/codigo</code></p>
+               <code>{html_escape(BASE_URL)}/codigo</code></p>
+            <p style="margin-top:20px;font-size:12px;color:#666">
+               Bind: {html_escape(BIND_DESC)}</p>
         </div></body></html>"""
         data = html.encode('utf-8')
         self.send_response(200)
@@ -245,7 +357,7 @@ class RedirectHandler(BaseHTTPRequestHandler):
 
     def _send_error(self, code, title, msg):
         html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
-        <title>{title}</title>
+        <title>{html_escape(title)}</title>
         <style>
             body{{font-family:system-ui,sans-serif;background:#1e1e2e;color:#e0e0ea;
                   display:grid;place-items:center;min-height:100vh;margin:0;padding:24px}}
@@ -259,8 +371,8 @@ class RedirectHandler(BaseHTTPRequestHandler):
         </style></head><body>
         <div class="box">
             <div class="icon">&#10005;</div>
-            <h1>{title}</h1>
-            <p>{msg}</p>
+            <h1>{html_escape(title)}</h1>
+            <p>{html_escape(msg)}</p>
         </div></body></html>"""
         data = html.encode('utf-8')
         self.send_response(code)
@@ -269,15 +381,70 @@ class RedirectHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _send_password_form(self, code, error=False):
+        action = '/' + html_escape(code)
+        err_html = ('<div class="err">Contraseña incorrecta. Inténtalo de nuevo.</div>'
+                    if error else '')
+        html = f"""<!DOCTYPE html><html lang="es"><head><meta charset="utf-8">
+        <title>Enlace protegido</title>
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <style>
+            body{{font-family:system-ui,sans-serif;background:#1e1e2e;color:#e0e0ea;
+                  display:grid;place-items:center;min-height:100vh;margin:0;padding:24px}}
+            .box{{max-width:400px;width:100%;text-align:center;background:#2a2a3e;
+                 border:1px solid #3a3a52;border-radius:16px;padding:40px 28px;
+                 box-sizing:border-box}}
+            .lock{{font-size:34px;margin-bottom:10px}}
+            h1{{margin:0 0 8px;font-size:19px}}
+            p{{color:#8888a0;margin:0 0 20px;font-size:13px}}
+            input[type=password]{{width:100%;padding:12px 14px;border:1px solid #3a3a52;
+                                 border-radius:10px;background:#1a1a2a;color:#e0e0ea;
+                                 font-size:14px;box-sizing:border-box;outline:none}}
+            input[type=password]:focus{{border-color:#6366f1}}
+            button{{width:100%;margin-top:14px;padding:12px;border:0;border-radius:10px;
+                   background:#6366f1;color:#fff;font-weight:600;font-size:14px;
+                   cursor:pointer;transition:background .15s}}
+            button:hover{{background:#818cf8}}
+            .err{{background:#7f1d1d;color:#fecaca;padding:10px;border-radius:8px;
+                 margin-bottom:14px;font-size:13px}}
+        </style></head><body>
+        <div class="box">
+            <div class="lock">🔒</div>
+            <h1>Enlace protegido</h1>
+            <p>Introduce la contraseña para acceder al destino.</p>
+            {err_html}
+            <form method="POST" action="{action}" autocomplete="off">
+                <input type="password" name="password"
+                       placeholder="Contraseña" autofocus required>
+                <button type="submit">Acceder</button>
+            </form>
+        </div></body></html>"""
+        data = html.encode('utf-8')
+        self.send_response(401)
+        self.send_header('Content-Type', 'text/html; charset=utf-8')
+        self.send_header('Content-Length', str(len(data)))
+        self.send_header('Cache-Control', 'no-store')
+        self.end_headers()
+        self.wfile.write(data)
+
 
 def start_http_server():
-    """Arranca el servidor HTTP en un hilo daemon."""
+    """Arranca el servidor HTTP en un hilo daemon (ThreadingHTTPServer)."""
     def run():
         try:
-            server = HTTPServer((SERVER_HOST, SERVER_PORT), RedirectHandler)
+            server = ThreadingHTTPServer((SERVER_HOST, SERVER_PORT), RedirectHandler)
+            SERVER_STATUS['running'] = True
+            SERVER_STATUS['error'] = None
+            print(f"[servidor] Escuchando en http://{BIND_DESC}  (URL mostrada: {BASE_URL})")
             server.serve_forever()
         except OSError as e:
-            print(f"[servidor] Error al iniciar en {SERVER_HOST}:{SERVER_PORT}: {e}")
+            SERVER_STATUS['running'] = False
+            SERVER_STATUS['error'] = str(e)
+            print(f"[servidor] Error al iniciar en {BIND_DESC}: {e}")
+        except Exception as e:
+            SERVER_STATUS['running'] = False
+            SERVER_STATUS['error'] = str(e)
+            print(f"[servidor] Error inesperado: {e}")
     t = threading.Thread(target=run, daemon=True)
     t.start()
 
@@ -298,6 +465,8 @@ class SmallURLApp:
         start_http_server()
         self._build_ui()
         self.refresh()
+        # Comprobar estado del servidor tras unos ms
+        self.root.after(400, self._check_server_status)
 
     # ---------------- Estilos ttk ----------------
     def _apply_styles(self):
@@ -337,8 +506,16 @@ class SmallURLApp:
 
         tk.Label(header, text="🔗 Small URL Python", bg=BG, fg=TEXT,
                  font=('Segoe UI', 17, 'bold')).pack(anchor='w')
+
+        bind_info = f"Bind {BIND_DESC}"
+        if IS_LOCAL_ONLY:
+            bind_info += "  ·  ⚠ solo local (usa SMALLURL_HOST=0.0.0.0 para LAN)"
+        elif PUBLIC_URL:
+            bind_info += "  ·  expuesto con URL pública"
+        else:
+            bind_info += "  ·  accesible desde tu red local"
         tk.Label(header,
-                 text=f"Servidor de redirecciones 301 activo en  {BASE_URL}",
+                 text=f"Servidor de redirecciones 301 activo en  {BASE_URL}   ·   {bind_info}",
                  bg=BG, fg=MUTED, font=('Segoe UI', 9)).pack(anchor='w', pady=(2, 0))
 
         # ============== FORMULARIO ==============
@@ -428,7 +605,7 @@ class SmallURLApp:
         heads = {'code': 'Código corto', 'url': 'URL destino', 'clicks': 'Clics',
                  'status': 'Estado', 'created': 'Creado', 'expires': 'Caduca',
                  'tags': 'Etiquetas'}
-        widths = {'code': 200, 'url': 340, 'clicks': 60, 'status': 100,
+        widths = {'code': 260, 'url': 320, 'clicks': 60, 'status': 140,
                   'created': 100, 'expires': 100, 'tags': 140}
 
         for c in columns:
@@ -462,6 +639,23 @@ class SmallURLApp:
                                 bg=BG, fg=MUTED, font=('Segoe UI', 9),
                                 anchor='w')
         self.status.pack(fill='x', padx=26, pady=(0, 10))
+
+    def _check_server_status(self):
+        if SERVER_STATUS['running']:
+            return
+        err = SERVER_STATUS['error'] or 'desconocido'
+        self.status.config(
+            text=f"⚠ El servidor NO pudo iniciarse en {BIND_DESC} ({err}). "
+                 f"¿Puerto ocupado? Prueba SMALLURL_PORT=8081"
+        )
+        messagebox.showwarning(
+            "Servidor no disponible",
+            f"No se pudo arrancar el servidor en {BIND_DESC}.\n\n"
+            f"Motivo: {err}\n\n"
+            f"Puedes cambiar el puerto con la variable de entorno "
+            f"SMALLURL_PORT (por ejemplo 8081).",
+            parent=self.root
+        )
 
     def _labeled_entry(self, parent, label, hint, width=14):
         f = tk.Frame(parent, bg=SURFACE)
@@ -500,14 +694,12 @@ class SmallURLApp:
         exp_in  = self.entry_exp.get().strip()
         tags_in = self.entry_tags.get().strip()
 
-        # Validar URL
         try:
             url = normalize_url(raw_url)
         except ValueError as e:
             messagebox.showerror("URL no válida", str(e), parent=self.root)
             return
 
-        # Validar fecha
         expires_iso = None
         if exp_in:
             try:
@@ -522,7 +714,6 @@ class SmallURLApp:
 
         conn = get_conn()
         try:
-            # Determinar código
             if code_in:
                 if not (3 <= len(code_in) <= 32) or \
                    not all(c.isalnum() or c in '-_' for c in code_in):
@@ -558,24 +749,31 @@ class SmallURLApp:
 
         short = f"{BASE_URL}/{code}"
 
-        # Copiar al portapapeles
         try:
             self.root.clipboard_clear()
             self.root.clipboard_append(short)
         except Exception:
             pass
 
-        # Limpiar campos opcionales
         for w in (self.entry_code, self.entry_pass, self.entry_exp, self.entry_tags):
             w.delete(0, 'end')
 
-        # Mensaje
         self.lbl_result.config(text=f"✓  {short}", fg=OK)
         self.root.after(6000, lambda: self.lbl_result.config(text=""))
 
         self.refresh()
+
+        pwd_note = ("\n\n🔒 Este enlace pide una contraseña al abrirse."
+                    if pwd_in else "")
+        if IS_LOCAL_ONLY:
+            reach_note = ("\n\n⚠ Servidor en modo LOCAL: solo accesible desde este equipo.\n"
+                          "   Exporta SMALLURL_HOST=0.0.0.0 para LAN o define SMALLURL_PUBLIC_URL\n"
+                          "   para exponerlo por Internet (ngrok, Cloudflare Tunnel, VPS).")
+        else:
+            reach_note = f"\n\nServidor accesible en {BIND_DESC}."
+
         messagebox.showinfo("Enlace creado",
-            f"Enlace corto:\n{short}\n\nDestino:\n{url}\n\n"
+            f"Enlace corto:\n{short}\n\nDestino:\n{url}{pwd_note}{reach_note}\n\n"
             f"(Ya está copiado en el portapapeles)",
             parent=self.root)
 
@@ -606,7 +804,6 @@ class SmallURLApp:
         self.stat_widgets['clicks'].config(text=str(clicks))
         self.stat_widgets['today'].config(text=str(today_clicks))
 
-        # Rellenar tree
         for it in self.tree.get_children():
             self.tree.delete(it)
 
@@ -626,6 +823,9 @@ class SmallURLApp:
                 status = '⏸ Inactivo'
             else:
                 status = '● Activo'
+
+            if r['pass_hash']:
+                status = '🔒 ' + status
 
             self.tree.insert('', 'end', iid=r['code'], values=(
                 f"{BASE_URL}/{r['code']}",
@@ -719,7 +919,6 @@ class SmallURLApp:
             if not link:
                 return
 
-            # Clics por día (últimos 7)
             days = []
             for i in range(6, -1, -1):
                 d = (datetime.now() - timedelta(days=i)).date()
@@ -740,21 +939,18 @@ class SmallURLApp:
         finally:
             conn.close()
 
-        # ---- Ventana ----
         win = tk.Toplevel(self.root)
         win.title(f"Estadísticas · {code}")
         win.geometry("860x640")
         win.configure(bg=BG)
         win.transient(self.root)
 
-        # Encabezado
         tk.Label(win, text=f"📊 Analítica · {code}", bg=BG, fg=TEXT,
                  font=('Segoe UI', 15, 'bold')).pack(anchor='w', padx=22, pady=(18, 4))
         tk.Label(win, text=f"Destino: {link['url']}", bg=BG, fg=MUTED,
                  font=('Segoe UI', 9), wraplength=800,
                  justify='left').pack(anchor='w', padx=22)
 
-        # Stats
         srow = tk.Frame(win, bg=BG)
         srow.pack(fill='x', padx=22, pady=(14, 10))
         for label, val in [
@@ -773,7 +969,6 @@ class SmallURLApp:
             tk.Label(ib, text=str(val), bg=SURFACE, fg=TEXT,
                      font=('Segoe UI', 15, 'bold')).pack(anchor='w', pady=(3, 0))
 
-        # Gráfico
         cf = tk.Frame(win, bg=SURFACE,
                       highlightbackground=BORDER, highlightthickness=1)
         cf.pack(fill='x', padx=22, pady=(0, 12))
@@ -809,7 +1004,6 @@ class SmallURLApp:
         canvas.bind('<Configure>', draw_chart)
         win.after(120, draw_chart)
 
-        # Tabla
         tf = tk.Frame(win, bg=SURFACE,
                       highlightbackground=BORDER, highlightthickness=1)
         tf.pack(fill='both', expand=True, padx=22, pady=(0, 20))
@@ -855,7 +1049,6 @@ class SmallURLApp:
 
         short = f"{BASE_URL}/{code}"
 
-        # Generar la imagen
         try:
             img = qrcode.make(short)
         except Exception as e:
@@ -865,7 +1058,6 @@ class SmallURLApp:
                 parent=self.root)
             return
 
-        # Guardar temporal para previsualización
         tmp_path = os.path.join(
             os.environ.get('TEMP', os.path.expanduser('~')),
             f'smallurl-{code}.png'
@@ -875,7 +1067,6 @@ class SmallURLApp:
         except Exception:
             tmp_path = None
 
-        # Ventana
         win = tk.Toplevel(self.root)
         win.title(f"QR · {code}")
         win.geometry("420x600")
@@ -889,7 +1080,6 @@ class SmallURLApp:
                  font=('Consolas', 10, 'bold'),
                  wraplength=360).pack(pady=(0, 16))
 
-        # Vista previa
         if HAS_PIL and tmp_path and os.path.exists(tmp_path):
             try:
                 pil_img = Image.open(tmp_path).resize((300, 300), Image.LANCZOS)
@@ -907,7 +1097,6 @@ class SmallURLApp:
                      bg=BG, fg=WARN, font=('Segoe UI', 9),
                      justify='center').pack(pady=(0, 18))
 
-        # Botones
         bf = tk.Frame(win, bg=BG)
         bf.pack()
 
@@ -966,7 +1155,7 @@ class SmallURLApp:
             with open(path, 'w', newline='', encoding='utf-8-sig') as f:
                 w = csv.writer(f)
                 w.writerow(['codigo', 'enlace_corto', 'url_original', 'creado',
-                            'caduca', 'activo', 'clics', 'etiquetas'])
+                            'caduca', 'activo', 'protegido', 'clics', 'etiquetas'])
                 for r in rows:
                     w.writerow([
                         r['code'],
@@ -975,6 +1164,7 @@ class SmallURLApp:
                         r['created_at'],
                         r['expires_at'] or '',
                         'si' if r['active'] else 'no',
+                        'si' if r['pass_hash'] else 'no',
                         r['total_clicks'],
                         r['tags'] or ''
                     ])
